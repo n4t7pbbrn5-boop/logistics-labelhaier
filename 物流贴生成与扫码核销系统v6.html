@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>物流贴生成与扫码核销系统</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: "PingFang SC", "Microsoft YaHei", sans-serif; background: #f0f4f8; color: #0f172a; }
+.container { max-width: 1400px; margin: 0 auto; padding: 16px; }
+
+/* ====== 顶部导航 ====== */
+.top-nav { background: linear-gradient(135deg, #015aaa, #1a3a6b); border-radius: 12px; padding: 20px 32px; color: #fff; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+.top-nav h1 { font-size: 22px; margin-bottom: 4px; }
+.top-nav p { font-size: 13px; opacity: 0.85; }
+.nav-tabs { display: flex; gap: 0; background: rgba(255,255,255,0.12); border-radius: 10px; overflow: hidden; }
+.nav-tab { padding: 10px 24px; cursor: pointer; font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.7); transition: all 0.2s; display: flex; align-items: center; gap: 6px; }
+.nav-tab:hover { color: #fff; background: rgba(255,255,255,0.08); }
+.nav-tab.active { background: rgba(255,255,255,0.2); color: #fff; }
+
+/* ====== 通用 ====== */
+.hidden { display: none !important; }
+.btn { padding: 10px 24px; border-radius: 8px; border: none; cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; }
+.btn-primary { background: #015aaa; color: #fff; }
+.btn-primary:hover { background: #014a90; }
+.btn-primary:disabled { background: #94a3b8; cursor: not-allowed; }
+.btn-success { background: #16a34a; color: #fff; }
+.btn-success:hover { background: #15803d; }
+.btn-success:disabled { background: #94a3b8; cursor: not-allowed; }
+.btn-danger { background: #dc2626; color: #fff; }
+.btn-danger:hover { background: #b91c1c; }
+.btn-danger:disabled { background: #94a3b8; cursor: not-allowed; }
+.btn-secondary { background: #e8f1fa; color: #015aaa; border: 1px solid #c8d9ea; }
+.btn-secondary:hover { background: #d4e6f7; }
+.btn-warning { background: #f59e0b; color: #fff; }
+.btn-warning:hover { background: #d97706; }
+.btn-sm { padding: 6px 16px; font-size: 13px; }
+
+.card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+.card-title { font-size: 16px; font-weight: 700; color: #015aaa; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+.card-title::before { content: ''; display: inline-block; width: 4px; height: 18px; background: #015aaa; border-radius: 2px; }
+
+.tip-box { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 12px 16px; font-size: 13px; color: #0369a1; margin-bottom: 16px; line-height: 1.6; }
+
+.upload-zone { background: #fff; border: 2px dashed #c8d9ea; border-radius: 12px; padding: 40px; text-align: center; cursor: pointer; transition: all 0.3s; margin-bottom: 20px; }
+.upload-zone:hover { border-color: #015aaa; background: #f8fbff; }
+.upload-zone.dragover { border-color: #015aaa; background: #e8f1fa; }
+.upload-icon { font-size: 42px; color: #015aaa; margin-bottom: 10px; }
+.upload-text { font-size: 15px; color: #475569; }
+.upload-hint { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+.file-info { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; margin-top: 12px; font-size: 14px; color: #16a34a; }
+.file-info .del-btn { margin-left: auto; color: #dc2626; cursor: pointer; font-size: 13px; border: none; background: none; }
+
+.empty-state { text-align: center; padding: 40px 20px; color: #94a3b8; }
+.empty-state .icon { font-size: 40px; margin-bottom: 10px; }
+
+/* ====== 统计卡片 ====== */
+.stats-row { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+.stat-card { background: #fff; border-radius: 12px; padding: 20px 28px; flex: 1; min-width: 130px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid #e2e8f0; }
+.stat-card .stat-num { font-size: 30px; font-weight: 700; line-height: 1.2; }
+.stat-card .stat-label { font-size: 13px; color: #64748b; margin-top: 4px; }
+.stat-card.total .stat-num { color: #015aaa; }
+.stat-card.matched .stat-num { color: #16a34a; }
+.stat-card.unmatched .stat-num { color: #dc2626; }
+.stat-card.scanned .stat-num { color: #f59e0b; }
+
+/* ====== 汇总栏 ====== */
+.summary-bar { background: linear-gradient(135deg, #e8f1fa, #f0f7ff); border: 1px solid #c8d9ea; border-radius: 10px; padding: 14px 24px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.summary-bar .summary-left { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.summary-bar .summary-stat .num { font-size: 20px; font-weight: 700; color: #015aaa; }
+.summary-bar .summary-stat .label { font-size: 13px; color: #475569; }
+.summary-bar .summary-actions { display: flex; gap: 10px; }
+
+/* ====== Excel格式表 ====== */
+.format-table { width: 100%; border-collapse: collapse; }
+.format-table th { background: #e8f1fa; color: #015aaa; padding: 10px 16px; text-align: left; font-size: 14px; font-weight: 600; border: 1px solid #c8d9ea; }
+.format-table td { padding: 10px 16px; font-size: 14px; border: 1px solid #e2e8f0; }
+.format-table tr:nth-child(even) td { background: #f8fafc; }
+.format-table .required { color: #dc2626; font-weight: 700; }
+.format-table .optional { color: #64748b; }
+
+/* ====== 物流贴预览（竖版A4一页两张） ====== */
+.labels-grid { display: flex; flex-direction: column; gap: 20px; }
+.pdf-page { width: 100%; aspect-ratio: 210 / 297; background: #fff; border: 1px solid #c8d9ea; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 1px 4px rgba(1,90,170,0.06); }
+.pdf-page .page-divider { height: 1px; background: #c8d9ea; flex-shrink: 0; }
+
+/* ====== 单个物流贴 ====== */
+.label-card { flex: 1; display: flex; flex-direction: column; background: #fff; overflow: hidden; min-height: 0; border: none; border-radius: 0; box-shadow: none; }
+.label-card .label-header { background: linear-gradient(135deg, #015aaa, #1a3a6b); color: #fff; padding: 1.5% 3%; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+.label-card .label-header .title { font-size: clamp(18px, 2.4vw, 32px); font-weight: 600; }
+.label-card .label-header .seq { font-size: clamp(14px, 1.3vw, 20px); opacity: 0.8; }
+.label-card .label-code-bar { background: #e8f1fa; padding: 1% 3%; border-bottom: 1px solid #c8d9ea; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.label-card .label-code-bar .label { font-size: clamp(14px, 1.3vw, 20px); color: #015aaa; font-weight: 600; white-space: nowrap; }
+.label-card .label-code-bar .code { font-size: clamp(20px, 2.4vw, 36px); font-weight: 700; color: #0f172a; letter-spacing: 1.5px; }
+.label-card .label-body { flex: 1; display: flex; gap: 3%; padding: 3% 3%; min-height: 0; }
+.label-card .label-center { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: clamp(10px, 1.8vw, 24px); padding: 0 2%; }
+.label-card .label-field { display: flex; align-items: baseline; gap: 8px; }
+.label-card .label-field .field-label { font-size: clamp(16px, 1.6vw, 26px); color: #64748b; min-width: clamp(70px, 7vw, 110px); flex-shrink: 0; }
+.label-card .label-field .field-value { font-size: clamp(18px, 1.8vw, 30px); color: #0f172a; font-weight: 500; }
+.label-card .label-right { flex: 0 0 30%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+.label-card .label-qr-box { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.label-card .label-qr-box img { width: clamp(200px, 24vw, 360px); height: clamp(200px, 24vw, 360px); }
+.label-card .label-qr-label { font-size: clamp(13px, 1.2vw, 18px); color: #64748b; }
+.label-card .label-footer { padding: 0.8% 3%; background: #f8fafc; border-top: 1px solid #e2e8f0; font-size: clamp(12px, 1vw, 16px); color: #94a3b8; display: flex; justify-content: space-between; flex-shrink: 0; }
+
+/* ====== 示例预览 ====== */
+.sample-section { background: #fff; border: 1px solid #c8d9ea; border-radius: 12px; padding: 24px 28px; margin-bottom: 20px; }
+.sample-section .section-title { font-size: 16px; font-weight: 700; color: #015aaa; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.sample-section .section-title::before { content: ''; display: inline-block; width: 4px; height: 18px; background: #015aaa; border-radius: 2px; }
+.sample-page { width: 100%; max-width: 420px; margin: 0 auto; aspect-ratio: 210 / 297; background: #fff; border: 1px solid #c8d9ea; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.sample-page .page-divider { height: 1px; background: #c8d9ea; flex-shrink: 0; }
+.sample-label { flex: 1; display: flex; flex-direction: column; background: #fff; overflow: hidden; min-height: 0; }
+
+/* ====== 核销系统：来源切换 ====== */
+.source-tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 2px solid #e2e8f0; }
+.source-tab { padding: 12px 28px; cursor: pointer; font-size: 14px; font-weight: 600; color: #64748b; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; display: flex; align-items: center; gap: 8px; }
+.source-tab:hover { color: #015aaa; }
+.source-tab.active { color: #015aaa; border-bottom-color: #015aaa; }
+.source-tab .tab-badge { background: #e2e8f0; color: #64748b; border-radius: 10px; padding: 2px 10px; font-size: 12px; }
+.source-tab.active .tab-badge { background: #dbeafe; color: #015aaa; }
+
+.v8-info-box { background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+.v8-info-box .v8-title { font-size: 15px; font-weight: 600; color: #7c3aed; margin-bottom: 8px; }
+.v8-info-box .v8-desc { font-size: 13px; color: #64748b; line-height: 1.6; }
+.v8-info-box .v8-count { font-size: 24px; font-weight: 700; color: #7c3aed; }
+
+/* ====== 核销：扫码区 ====== */
+.scan-tabs { display: flex; gap: 0; margin-bottom: 16px; border-radius: 8px; overflow: hidden; border: 1px solid #c8d9ea; }
+.scan-tab { flex: 1; padding: 10px; cursor: pointer; font-size: 14px; font-weight: 600; text-align: center; background: #f8fafc; color: #64748b; transition: all 0.2s; }
+.scan-tab.active { background: #015aaa; color: #fff; }
+.scan-section { text-align: center; }
+.scan-video-wrap { position: relative; width: 100%; max-width: 400px; margin: 0 auto 16px; }
+#scanVideo { width: 100%; border-radius: 10px; background: #000; display: block; }
+#scanCanvas { display: none; }
+.scan-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; border-radius: 10px; overflow: hidden; }
+.scan-overlay::after { content: ''; position: absolute; top: 15%; left: 10%; right: 10%; height: 2px; background: rgba(22,163,74,0.8); box-shadow: 0 0 8px rgba(22,163,74,0.6); animation: scanLine 2s linear infinite; }
+@keyframes scanLine { 0% { top: 15%; } 50% { top: 80%; } 100% { top: 15%; } }
+.manual-input { display: flex; gap: 10px; margin-top: 16px; }
+.manual-input input { flex: 1; padding: 10px 16px; border: 1px solid #c8d9ea; border-radius: 8px; font-size: 15px; font-family: monospace; }
+.manual-input input:focus { outline: none; border-color: #015aaa; box-shadow: 0 0 0 3px rgba(1,90,170,0.1); }
+.scan-status { font-size: 14px; padding: 10px 16px; border-radius: 8px; margin-top: 12px; display: none; }
+.scan-status.success { display: block; background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+.scan-status.fail { display: block; background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+.scan-status.info { display: block; background: #f0f9ff; color: #015aaa; border: 1px solid #bae6fd; }
+
+.recent-result { display: flex; align-items: center; gap: 12px; padding: 16px; border-radius: 10px; margin-bottom: 12px; border: 1px solid; }
+.recent-result.matched { background: #f0fdf4; border-color: #bbf7d0; }
+.recent-result.unmatched { background: #fef2f2; border-color: #fecaca; }
+.recent-result.duplicate { background: #fffbeb; border-color: #fde68a; }
+.recent-result .result-icon { font-size: 28px; }
+.recent-result .result-info { flex: 1; }
+.recent-result .result-code { font-size: 16px; font-weight: 700; font-family: monospace; }
+.recent-result .result-msg { font-size: 13px; margin-top: 2px; }
+.recent-result.matched .result-msg { color: #16a34a; }
+.recent-result.unmatched .result-msg { color: #dc2626; }
+.recent-result.duplicate .result-msg { color: #f59e0b; }
+.recent-result .result-time { font-size: 12px; color: #94a3b8; }
+
+/* ====== 核销：表格 ====== */
+.table-wrap { overflow-x: auto; max-height: 500px; overflow-y: auto; border-radius: 8px; border: 1px solid #e2e8f0; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead { position: sticky; top: 0; z-index: 1; }
+th { background: #e8f1fa; color: #015aaa; padding: 10px 14px; text-align: left; font-weight: 600; white-space: nowrap; }
+td { padding: 10px 14px; border-top: 1px solid #f1f5f9; }
+tr:nth-child(even) td { background: #f8fafc; }
+.tag { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.tag.matched { background: #dcfce7; color: #16a34a; }
+.tag.pending { background: #f1f5f9; color: #64748b; }
+.tag.duplicate { background: #fef3c7; color: #d97706; }
+.tag.source-excel { background: #dbeafe; color: #015aaa; }
+.tag.source-v8 { background: #f3e8ff; color: #7c3aed; }
+
+.filter-bar { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.filter-bar input { padding: 8px 14px; border: 1px solid #c8d9ea; border-radius: 6px; font-size: 14px; flex: 1; min-width: 180px; }
+.filter-bar select { padding: 8px 14px; border: 1px solid #c8d9ea; border-radius: 6px; font-size: 14px; }
+
+.btn-group { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+.progress-bar { width: 100%; height: 6px; background: #e2e8f0; border-radius: 3px; margin: 12px 0; overflow: hidden; }
+.progress-fill { height: 100%; background: #015aaa; border-radius: 3px; transition: width 0.3s; }
+.status-msg { font-size: 13px; color: #475569; }
+
+.main-grid { display: flex; gap: 20px; flex-wrap: wrap; }
+.main-grid > div { flex: 1; min-width: 320px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="top-nav">
+    <div>
+      <h1>物流贴生成与扫码核销系统</h1>
+      <p>一个页面搞定：生成物流贴 PDF + 扫码核销，手机电脑都能用</p>
+    </div>
+    <div class="nav-tabs">
+      <div class="nav-tab active" id="navGenerate" onclick="switchPage('generate')">🏷️ 物流贴生成</div>
+      <div class="nav-tab" id="navVerify" onclick="switchPage('verify')">📱 扫码核销</div>
+    </div>
+  </div>
+
+  <!-- ==================== 页面1：物流贴生成 ==================== -->
+  <div id="pageGenerate">
+    <div class="summary-bar">
+      <div class="summary-left">
+        <div class="summary-stat"><span class="num" id="genTotal">0</span> <span class="label">已生成物流贴</span></div>
+        <div class="summary-stat"><span class="num" id="genBatch">0</span> <span class="label">上传批次</span></div>
+        <div style="font-size:12px;color:#16a34a;display:flex;align-items:center;gap:4px;">💾 累计统计已自动保存，物流贴PDF请每次即时下载</div>
+      </div>
+      <div class="summary-actions">
+        <button class="btn btn-success btn-sm" id="summaryExcelBtn" onclick="downloadSummaryExcel()" disabled>下载汇总 Excel</button>
+        <button class="btn btn-warning btn-sm" id="clearGenBtn" onclick="clearAllGenerated()" disabled>清空记录</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Excel 格式要求</div>
+      <table class="format-table">
+        <tr><th style="width:30%">列名</th><th style="width:50%">说明</th><th style="width:20%">是否必填</th></tr>
+        <tr><td>产业</td><td>产品所属产业（如：洗衣机、冰箱、空调）</td><td class="required">必填</td></tr>
+        <tr><td>区域名称</td><td>展示区域或场景名称</td><td class="required">必填</td></tr>
+        <tr><td>编码</td><td>可留空，程序自动生成唯一编码</td><td class="optional">选填</td></tr>
+        <tr><td>产品名称（不超过8个字）</td><td>产品显示名称</td><td class="required">必填</td></tr>
+        <tr><td>产品型号</td><td>产品型号代码</td><td class="required">必填</td></tr>
+      </table>
+    </div>
+    <div class="upload-zone" id="genUploadZone">
+      <div class="upload-icon">📁</div>
+      <div class="upload-text">点击或拖拽 Excel 文件到此处</div>
+      <div class="upload-hint">支持 .xlsx / .xls 格式，可多次上传累积</div>
+    </div>
+    <input type="file" id="genFileInput" accept=".xlsx,.xls" class="hidden">
+
+    <div id="genActionArea" class="hidden">
+      <div class="btn-group" style="margin-bottom:16px;">
+        <button class="btn btn-primary" id="generatePdfBtn" onclick="generatePDF()">生成竖版 PDF（一页两张）</button>
+        <button class="btn btn-secondary" onclick="resetCurrentBatch()">清空当前批次</button>
+        <span style="font-size:14px;color:#475569;align-self:center;margin-left:auto;" id="genProductCount"></span>
+      </div>
+      <div class="progress-bar hidden" id="genProgressBar"><div class="progress-fill" id="genProgressFill" style="width:0%"></div></div>
+      <div class="status-msg hidden" id="genStatusMsg"></div>
+    </div>
+
+    <div class="empty-state" id="genEmptyState">
+      <div class="icon">📋</div>
+      <div>上传 Excel 后这里会预览所有物流贴</div>
+    </div>
+    <div id="labelContainer" class="labels-grid hidden"></div>
+  </div>
+
+  <!-- ==================== 页面2：扫码核销 ==================== -->
+  <div id="pageVerify" class="hidden">
+    <div class="summary-bar">
+      <div class="summary-left">
+        <div class="summary-stat"><span class="num" id="vTotal">0</span> <span class="label">总编码数</span></div>
+        <div class="summary-stat"><span class="num" id="vMatched" style="color:#16a34a">0</span> <span class="label">已核销</span></div>
+        <div class="summary-stat"><span class="num" id="vUnmatched" style="color:#dc2626">0</span> <span class="label">未核销</span></div>
+        <div class="summary-stat"><span class="num" id="vScanned" style="color:#f59e0b">0</span> <span class="label">扫码次数</span></div>
+      </div>
+      <div class="summary-actions">
+        <button class="btn btn-success btn-sm" id="exportResultBtn" onclick="exportResults()" disabled>导出核销结果</button>
+        <button class="btn btn-danger btn-sm" id="clearVerifyBtn" onclick="clearVerify()" disabled>清空所有</button>
+      </div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-card total"><div class="stat-num" id="cardTotal">0</div><div class="stat-label">编码总数</div></div>
+      <div class="stat-card matched"><div class="stat-num" id="cardMatched">0</div><div class="stat-label">已匹配核销</div></div>
+      <div class="stat-card unmatched"><div class="stat-num" id="cardUnmatched">0</div><div class="stat-label">未匹配</div></div>
+      <div class="stat-card scanned"><div class="stat-num" id="cardScanned">0</div><div class="stat-label">总扫码次数</div></div>
+    </div>
+
+    <div class="main-grid">
+      <div>
+        <div class="card">
+          <div class="card-title">步骤 1：选择编码来源</div>
+          <div class="tip-box">
+            <b>方式一</b>：上传 Excel 编码清单（需含"编码"列）<br>
+            <b>方式二</b>：自动抓取本页"物流贴生成"Tab 中已生成的编码（点击下方刷新即可）
+          </div>
+          <div class="source-tabs">
+            <div class="source-tab active" id="vTabExcel" onclick="switchSource('excel')">📁 Excel 上传 <span class="tab-badge" id="excelBadge">0</span></div>
+            <div class="source-tab" id="vTabGen" onclick="switchSource('gen')">🔗 物流贴生成器抓取 <span class="tab-badge" id="genBadge">0</span></div>
+          </div>
+
+          <div id="excelSourcePanel">
+            <div class="upload-zone" id="vUploadZone" style="padding:32px;">
+              <div class="upload-icon">📁</div>
+              <div class="upload-text">点击或拖拽 Excel 文件到此处</div>
+              <div class="upload-hint">需包含"编码"列</div>
+            </div>
+            <input type="file" id="vFileInput" accept=".xlsx,.xls" class="hidden">
+            <div id="vFileInfo" class="file-info hidden">
+              <span>📄</span><span id="vFileName"></span><span id="vFileCount"></span>
+              <button class="del-btn" onclick="removeVerifyExcel()" style="margin-left:auto;color:#dc2626;cursor:pointer;border:none;background:none;font-size:13px;">移除</button>
+            </div>
+          </div>
+
+          <div id="genSourcePanel" class="hidden">
+            <div class="v8-info-box">
+              <div class="v8-title">🔗 物流贴生成器编码抓取</div>
+              <div class="v8-desc">从本页"物流贴生成"Tab 中已生成的物流贴自动读取编码，无需额外操作。</div>
+              <div style="display:flex;align-items:center;gap:12px;margin-top:12px;">
+                <span class="v8-count" id="genCodesCount">0</span>
+                <span style="font-size:14px;color:#64748b;">条编码可抓取</span>
+              </div>
+              <button class="btn btn-primary btn-sm" style="margin-top:12px;" onclick="loadGenCodes()">🔄 刷新抓取编码</button>
+            </div>
+            <div id="genCodesEmpty" class="empty-state">
+              <div class="icon">🔗</div>
+              <div>未检测到物流贴生成器编码</div>
+              <div style="font-size:13px;margin-top:6px;">请先在"物流贴生成"Tab 中上传 Excel 并生成物流贴</div>
+            </div>
+            <div id="genCodesPreview" class="hidden">
+              <div class="table-wrap" style="max-height:200px;">
+                <table><thead><tr><th>编码</th><th>产业</th><th>产品名称</th><th>产品型号</th></tr></thead>
+                <tbody id="genCodesBody"></tbody></table>
+              </div>
+              <button class="btn btn-success" style="margin-top:12px;" onclick="importGenCodes()">导入这 <span id="genImportCount">0</span> 条编码</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">步骤 2：扫码 / 手动输入编码</div>
+          <div class="scan-section">
+            <div class="scan-tabs">
+              <div class="scan-tab active" id="scanTabManual" onclick="switchScanMode('manual')">⌨️ 手动输入</div>
+              <div class="scan-tab" id="scanTabCamera" onclick="switchScanMode('camera')">📷 摄像头扫码</div>
+            </div>
+            <div id="manualScanPanel">
+              <div class="manual-input">
+                <input type="text" id="manualInput" placeholder="输入编码后按回车..." disabled>
+                <button class="btn btn-success" id="manualBtn" onclick="submitManual()" disabled>核对</button>
+              </div>
+            </div>
+            <div id="cameraScanPanel" class="hidden">
+              <div class="scan-video-wrap" id="videoWrap" style="display:none;">
+                <video id="scanVideo" autoplay playsinline></video>
+                <div class="scan-overlay"></div>
+              </div>
+              <canvas id="scanCanvas"></canvas>
+              <div class="btn-group" style="justify-content:center;">
+                <button class="btn btn-primary" id="cameraBtn" onclick="toggleCamera()" disabled>📷 开启摄像头扫码</button>
+              </div>
+            </div>
+            <div class="scan-status" id="scanStatus"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">最近扫码结果</div>
+          <div id="recentResults">
+            <div class="empty-state"><div class="icon">🔍</div><div>扫码后结果会显示在这里</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <div class="card-title">编码核销明细</div>
+          <div class="filter-bar">
+            <input type="text" id="filterInput" placeholder="搜索编码、产品名称..." oninput="renderVerifyTable()">
+            <select id="filterStatus" onchange="renderVerifyTable()">
+              <option value="all">全部状态</option>
+              <option value="matched">已核销</option>
+              <option value="unmatched">未核销</option>
+              <option value="duplicate">重复扫码</option>
+            </select>
+          </div>
+          <div class="table-wrap">
+            <table id="resultTable">
+              <thead><tr><th>序号</th><th>来源</th><th>编码</th><th>产品名称</th><th>产品型号</th><th>状态</th><th>扫码时间</th><th>次数</th></tr></thead>
+              <tbody id="tableBody"><tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:30px;">请先选择编码来源并导入编码</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ====================================================================
+// 全局共享状态
+// ====================================================================
+var WPS_IMAGES = {"ID_E821464D13284BE392E94CC15734BA91": "data:image/png;base64,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"};
+var LS_KEY = 'haier_logistics_codes';
+
+// ===== 物流贴生成器状态 =====
+var allGeneratedRows = [];
+var currentBatchRows = [];
+var batchCount = 0;
+
+// ===== 核销系统状态 =====
+var verifyData = [];
+var scanHistory = [];
+var cameraStream = null;
+var cameraActive = false;
+var scanLoop = null;
+var currentSource = 'excel';
+var genCachedCodes = [];
+
+// ====================================================================
+// 页面切换
+// ====================================================================
+function switchPage(page) {
+  document.getElementById('navGenerate').classList.toggle('active', page === 'generate');
+  document.getElementById('navVerify').classList.toggle('active', page === 'verify');
+  document.getElementById('pageGenerate').classList.toggle('hidden', page !== 'generate');
+  document.getElementById('pageVerify').classList.toggle('hidden', page !== 'verify');
+  if (page === 'verify') loadGenCodes();
+}
+
+// ====================================================================
+// 通用工具
+// ====================================================================
+function normalize(s) { return String(s || '').trim(); }
+
+var COL_DEFS_GEN = [
+  { key: 'industry', names: ['产业'] },
+  { key: 'area',     names: ['区域名称'] },
+  { key: 'name',     names: ['产品名称', '产品名称（不超过8个字）'] },
+  { key: 'model',    names: ['产品型号', '型号'] },
+  { key: 'image',    names: ['产品图片', '  产品图片', '图片'] },
+  { key: 'code',     names: ['编码'] },
+  { key: 'contact',  names: ['联系人'] },
+  { key: 'phone',    names: ['联系方式'] }
+];
+var COL_DEFS_VERIFY = [
+  { key: 'code',     names: ['编码', '唯一编码', 'code'] },
+  { key: 'industry', names: ['产业'] },
+  { key: 'area',     names: ['区域名称'] },
+  { key: 'name',     names: ['产品名称', '产品名称（不超过8个字）'] },
+  { key: 'model',    names: ['产品型号', '型号'] },
+  { key: 'contact',  names: ['联系人'] },
+  { key: 'phone',    names: ['联系方式'] }
+];
+
+function findCol(headers, def) {
+  for (var i = 0; i < headers.length; i++) {
+    var h = normalize(headers[i]).toLowerCase();
+    for (var j = 0; j < def.names.length; j++) {
+      if (h === def.names[j].toLowerCase()) return i;
+    }
+  }
+  return -1;
+}
+
+var INDUSTRY_MAP = { '洗衣机':'XYJ','冰箱':'BX','空调':'KT','热水器':'RSQ','电视':'TV','厨电':'CD','电脑':'PC','手机':'SJ' };
+function getIndustryCode(ind) { return INDUSTRY_MAP[normalize(ind)] || 'GEN'; }
+function getDateStr() { var d = new Date(); return '' + d.getFullYear() + ('0'+(d.getMonth()+1)).slice(-2) + ('0'+d.getDate()).slice(-2); }
+function autoCode(industry, seq) { return 'LG-' + getDateStr() + '-' + getIndustryCode(industry) + '-' + String(seq).padStart(3, '0'); }
+
+function makeQR(text) {
+  var div = document.createElement('div');
+  new QRCode(div, { text: text, width: 720, height: 720, correctLevel: QRCode.CorrectLevel.M });
+  var canvas = div.querySelector('canvas');
+  var img = div.querySelector('img');
+  if (canvas) return canvas.toDataURL();
+  if (img) return img.src;
+  return null;
+}
+
+function extractDispImgId(formula) {
+  if (!formula) return null;
+  var s = String(formula);
+  var m = s.match(/DISPIMG\s*\(\s*"([^"]+)"/i);
+  if (m) return m[1];
+  if (s.indexOf('ID_') === 0) return s;
+  return null;
+}
+
+function blobToBase64(blob) {
+  return new Promise(function(resolve) {
+    var reader = new FileReader();
+    reader.onload = function() { resolve(reader.result); };
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function unzipAndExtractImages(arrayBuffer) {
+  var imageMap = {}, dispImgMap = {};
+  try {
+    var data = new Uint8Array(arrayBuffer);
+    var offset = 0, files = {};
+    while (offset < data.length - 4) {
+      if (data[offset]===0x50 && data[offset+1]===0x4B && data[offset+2]===0x03 && data[offset+3]===0x04) {
+        var nameLen = (data[offset+26]|(data[offset+27]<<8))>>>0;
+        var extraLen = (data[offset+28]|(data[offset+29]<<8))>>>0;
+        var compMethod = (data[offset+8]|(data[offset+9]<<8))>>>0;
+        var compSize = (data[offset+18]|(data[offset+19]<<8)|(data[offset+20]<<16)|(data[offset+21]<<24))>>>0;
+        var nameStart = offset + 30;
+        var fileName = new TextDecoder('utf-8').decode(data.slice(nameStart, nameStart + nameLen));
+        var dataStart = nameStart + nameLen + extraLen;
+        var compressedData = data.slice(dataStart, dataStart + compSize);
+        if (compMethod === 0) files[fileName] = compressedData;
+        else if (compMethod === 8) {
+          try {
+            var blob = new Blob([compressedData]);
+            var ds = new Response(blob).body.pipeThrough(new DecompressionStream('deflate-raw'));
+            files[fileName] = new Uint8Array(await new Response(ds).arrayBuffer());
+          } catch(e) {}
+        }
+        offset = dataStart + compSize;
+      } else offset++;
+    }
+    for (var fname in files) {
+      if (fname.indexOf('xl/media/') === 0) {
+        var ext = fname.split('.').pop().toLowerCase();
+        var mime = ext==='png'?'image/png':(ext==='jpg'||ext==='jpeg')?'image/jpeg':(ext==='gif'?'image/gif':'image/png');
+        imageMap[fname] = await blobToBase64(new Blob([files[fname]], { type: mime }));
+      }
+    }
+    var ci = files['xl/cellimages.xml'], cir = files['xl/_rels/cellimages.xml.rels'];
+    if (ci && cir) {
+      var xmlText = new TextDecoder('utf-8').decode(ci);
+      var relsText = new TextDecoder('utf-8').decode(cir);
+      var ridMap = {}, rm, relsRegex = /Id="([^"]+)"[^>]*Target="([^"]+)"/g;
+      while ((rm = relsRegex.exec(relsText)) !== null) ridMap[rm[1]] = rm[2];
+      var names = [], embeds = [];
+      xmlText.replace(/name="(ID_[^"]+)"/g, function(_, n) { names.push(n); });
+      xmlText.replace(/embed="([^"]+)"/g, function(_, e) { embeds.push(e); });
+      for (var i = 0; i < names.length && i < embeds.length; i++) {
+        var target = ridMap[embeds[i]] || '';
+        if (imageMap['xl/' + target]) dispImgMap[names[i]] = imageMap['xl/' + target];
+      }
+    }
+  } catch(e) { console.error('unzip error:', e); }
+  return { mediaImages: imageMap, dispImgMap: dispImgMap, allFiles: files || {} };
+}
+
+// ====================================================================
+// 物流贴生成器：文件上传
+// ====================================================================
+var genUploadZone = document.getElementById('genUploadZone');
+var genFileInput = document.getElementById('genFileInput');
+genUploadZone.addEventListener('click', function() { genFileInput.click(); });
+genUploadZone.addEventListener('dragover', function(e) { e.preventDefault(); genUploadZone.classList.add('dragover'); });
+genUploadZone.addEventListener('dragleave', function() { genUploadZone.classList.remove('dragover'); });
+genUploadZone.addEventListener('drop', function(e) { e.preventDefault(); genUploadZone.classList.remove('dragover'); if (e.dataTransfer.files.length) handleGenFile(e.dataTransfer.files[0]); });
+genFileInput.addEventListener('change', function(e) { if (e.target.files.length) handleGenFile(e.target.files[0]); });
+
+async function handleGenFile(file) {
+  var arrayBuffer = await file.arrayBuffer();
+  var imgResult = await unzipAndExtractImages(arrayBuffer);
+  try {
+    var wb = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellStyles: true });
+    var sheet = wb.Sheets[wb.SheetNames[0]];
+    var headers = [], range = XLSX.utils.decode_range(sheet['!ref']);
+    for (var c = range.s.c; c <= range.e.c; c++) { var cell = sheet[XLSX.utils.encode_cell({r:range.s.r,c:c})]; headers.push(cell ? cell.v : ''); }
+    var rows = [];
+    for (var r = range.s.r + 1; r <= range.e.r; r++) {
+      var rowData = {}, hasData = false;
+      for (var d = 0; d < COL_DEFS_GEN.length; d++) {
+        var colIdx = findCol(headers, COL_DEFS_GEN[d]);
+        if (colIdx === -1) continue;
+        var cellRef = XLSX.utils.encode_cell({r:r, c:colIdx});
+        var cell = sheet[cellRef];
+        var val = cell ? cell.v : '';
+        if (cell && cell.f) val = '=' + cell.f;
+        if (val) hasData = true;
+        rowData[COL_DEFS_GEN[d].key] = val;
+      }
+      if (hasData && normalize(rowData.industry) && normalize(rowData.industry) !== 'nan') rows.push(rowData);
+    }
+    var seqMap = {};
+    for (var i = 0; i < rows.length; i++) {
+      var ind = normalize(rows[i].industry);
+      if (!seqMap[ind]) seqMap[ind] = 0;
+      seqMap[ind]++;
+      if (!normalize(rows[i].code)) rows[i].code = autoCode(ind, seqMap[ind]);
+      rows[i]._imgUrl = resolveGenImage(rows[i], i, imgResult);
+      rows[i]._genTime = new Date().toLocaleString('zh-CN');
+      rows[i]._batch = batchCount + 1;
+    }
+    currentBatchRows = rows;
+    allGeneratedRows = allGeneratedRows.concat(rows);
+    batchCount++;
+    updateGenSummary();
+    renderGenLabels(allGeneratedRows);
+    saveToLocalStorage();
+  } catch (err) { alert('解析 Excel 失败: ' + err.message); }
+}
+
+function resolveGenImage(row, rowIdx, imgResult) {
+  var imgVal = normalize(row.image);
+  if (imgVal) {
+    var dispId = extractDispImgId(imgVal);
+    if (dispId) { if (WPS_IMAGES[dispId]) return WPS_IMAGES[dispId]; if (imgResult.dispImgMap && imgResult.dispImgMap[dispId]) return imgResult.dispImgMap[dispId]; }
+    if (imgVal.indexOf('http') === 0) return imgVal;
+    if (imgVal.indexOf('data:') === 0) return imgVal;
+  }
+  if (imgResult.mediaImages) {
+    var keys = Object.keys(imgResult.mediaImages);
+    if (keys.length === 1) return imgResult.mediaImages[keys[0]];
+    var exp = 'image' + (rowIdx + 1);
+    for (var k in imgResult.mediaImages) { if (k.indexOf(exp) !== -1) return imgResult.mediaImages[k]; }
+    if (rowIdx < keys.length) return imgResult.mediaImages[keys[rowIdx]];
+  }
+  return null;
+}
+
+var LS_CODES_KEY = 'haier_logistics_codes_list';
+var LS_HISTORY_KEY = 'haier_logistics_history';
+function saveToLocalStorage() {
+  try {
+    // 只保存汇总统计
+    var summary = { totalGenerated: genTotalSaved + allGeneratedRows.length, batchCount: batchCountSaved + batchCount };
+    localStorage.setItem(LS_KEY, JSON.stringify(summary));
+    // 保存编码列表供核销系统抓取（累积）
+    var existing = [];
+    try { var raw = localStorage.getItem(LS_CODES_KEY); if (raw) existing = JSON.parse(raw); } catch(e) {}
+    if (!Array.isArray(existing)) existing = [];
+    for (var i = 0; i < currentBatchRows.length; i++) {
+      var r = currentBatchRows[i];
+      existing.push({ code: normalize(r.code), industry: normalize(r.industry), area: normalize(r.area), name: normalize(r.name), model: normalize(r.model), contact: normalize(r.contact), phone: normalize(r.phone) });
+    }
+    localStorage.setItem(LS_CODES_KEY, JSON.stringify(existing));
+    // 保存完整历史记录（含批次号、生成时间）供汇总Excel下载
+    var history = [];
+    try { var hraw = localStorage.getItem(LS_HISTORY_KEY); if (hraw) history = JSON.parse(hraw); } catch(e) {}
+    if (!Array.isArray(history)) history = [];
+    var currentBatchNum = batchCountSaved + batchCount;
+    for (var i = 0; i < currentBatchRows.length; i++) {
+      var r = currentBatchRows[i];
+      history.push({
+        code: normalize(r.code), industry: normalize(r.industry), area: normalize(r.area),
+        name: normalize(r.name), model: normalize(r.model),
+        contact: normalize(r.contact), phone: normalize(r.phone),
+        _genTime: r._genTime || new Date().toLocaleString('zh-CN'),
+        _batch: currentBatchNum
+      });
+    }
+    localStorage.setItem(LS_HISTORY_KEY, JSON.stringify(history));
+  } catch(e) { console.warn('localStorage save failed:', e); }
+}
+
+function loadHistoryFromLocalStorage() {
+  try {
+    var raw = localStorage.getItem(LS_HISTORY_KEY);
+    if (!raw) return [];
+    var data = JSON.parse(raw);
+    return Array.isArray(data) ? data : [];
+  } catch(e) { return []; }
+}
+
+function loadFromLocalStorage() {
+  try {
+    var raw = localStorage.getItem(LS_KEY);
+    if (!raw) return null;
+    var data = JSON.parse(raw);
+    return data;
+  } catch(e) { console.warn('localStorage load failed:', e); return null; }
+}
+
+var genTotalSaved = 0, batchCountSaved = 0;
+function updateGenSummary() {
+  var total = genTotalSaved + allGeneratedRows.length;
+  var totalBatch = batchCountSaved + batchCount;
+  document.getElementById('genTotal').textContent = total;
+  document.getElementById('genBatch').textContent = totalBatch;
+  var btn = document.getElementById('summaryExcelBtn'), clearBtn = document.getElementById('clearGenBtn');
+  if (total > 0) { btn.disabled = false; clearBtn.disabled = false; } else { btn.disabled = true; clearBtn.disabled = true; }
+}
+
+function buildLabelHTML(r, index, total) {
+  var qrData = makeQR(normalize(r.code));
+  var fields = '';
+  fields += '<div class="label-field"><span class="field-label">产业</span><span class="field-value">' + normalize(r.industry) + '</span></div>';
+  fields += '<div class="label-field"><span class="field-label">区域名称</span><span class="field-value">' + normalize(r.area) + '</span></div>';
+  fields += '<div class="label-field"><span class="field-label">产品名称</span><span class="field-value">' + normalize(r.name).replace(/\n/g, '<br/>') + '</span></div>';
+  fields += '<div class="label-field"><span class="field-label">产品型号</span><span class="field-value">' + normalize(r.model) + '</span></div>';
+  if (normalize(r.contact)) fields += '<div class="label-field"><span class="field-label">联系人</span><span class="field-value">' + normalize(r.contact) + '</span></div>';
+  if (normalize(r.phone)) fields += '<div class="label-field"><span class="field-label">联系方式</span><span class="field-value">' + normalize(r.phone) + '</span></div>';
+  return '<div class="label-header"><span class="title">产品物流贴</span><span class="seq">序号 ' + String(index+1).padStart(2,'0') + ' / ' + total + '</span></div>' +
+    '<div class="label-code-bar"><span class="label">唯一编码</span><span class="code">' + normalize(r.code) + '</span></div>' +
+    '<div class="label-body"><div class="label-center">' + fields + '</div>' +
+    '<div class="label-right"><div class="label-qr-box"><img src="' + qrData + '" /><span class="label-qr-label">扫码核对</span></div></div></div>' +
+    '<div class="label-footer"><span>生成时间: ' + (r._genTime || '') + '</span><span>海尔智家 · 物流贴管理系统</span></div>';
+}
+
+function renderGenLabels(rows) {
+  document.getElementById('genEmptyState').classList.add('hidden');
+  document.getElementById('labelContainer').classList.remove('hidden');
+  document.getElementById('genActionArea').classList.remove('hidden');
+  document.getElementById('genProductCount').textContent = '当前批次 ' + currentBatchRows.length + ' 个，累计 ' + rows.length + ' 个';
+  var container = document.getElementById('labelContainer');
+  container.innerHTML = '';
+  for (var i = 0; i < rows.length; i += 2) {
+    var page = document.createElement('div');
+    page.className = 'pdf-page';
+    var l1 = document.createElement('div');
+    l1.className = 'label-card';
+    l1.innerHTML = buildLabelHTML(rows[i], i, rows.length);
+    page.appendChild(l1);
+    if (i + 1 < rows.length) {
+      var div = document.createElement('div');
+      div.className = 'page-divider';
+      page.appendChild(div);
+      var l2 = document.createElement('div');
+      l2.className = 'label-card';
+      l2.innerHTML = buildLabelHTML(rows[i+1], i+1, rows.length);
+      page.appendChild(l2);
+    }
+    container.appendChild(page);
+  }
+}
+
+function generatePDF() {
+  var btn = document.getElementById('generatePdfBtn');
+  btn.disabled = true; btn.textContent = '生成中...';
+  var progressBar = document.getElementById('genProgressBar');
+  var progressFill = document.getElementById('genProgressFill');
+  var statusMsg = document.getElementById('genStatusMsg');
+  progressBar.classList.remove('hidden');
+  statusMsg.classList.remove('hidden');
+  statusMsg.textContent = '正在生成 PDF...';
+  progressFill.style.width = '10%';
+  var pages = document.querySelectorAll('.pdf-page');
+  var pdf = new jspdf.jsPDF('p', 'mm', 'a4');
+  var pageW = 210, pageH = 297, done = 0;
+  var fname = '产品物流贴_竖版.pdf';
+  function captureNext(idx) {
+    if (idx >= pages.length) {
+      pdf.save(fname);
+      btn.disabled = false; btn.textContent = '生成竖版 PDF（一页两张）';
+      progressBar.classList.add('hidden');
+      statusMsg.textContent = '✅ PDF 已下载';
+      // PDF下载后累加历史统计，清空当前预览
+      genTotalSaved += allGeneratedRows.length;
+      batchCountSaved += batchCount;
+      allGeneratedRows = []; currentBatchRows = []; batchCount = 0;
+      saveToLocalStorage();
+      updateGenSummary();
+      document.getElementById('labelContainer').classList.add('hidden');
+      document.getElementById('labelContainer').innerHTML = '';
+      document.getElementById('genActionArea').classList.add('hidden');
+      document.getElementById('genEmptyState').classList.remove('hidden');
+      document.getElementById('genFileInput').value = '';
+      return;
+    }
+    html2canvas(pages[idx], { scale: 2, useCORS: true, backgroundColor: '#ffffff' }).then(function(canvas) {
+      if (idx > 0) pdf.addPage();
+      var imgData = canvas.toDataURL('image/jpeg', 0.95);
+      var cw = canvas.width, ch = canvas.height;
+      var targetRatio = pageW / pageH, actualRatio = cw / ch;
+      var x = 0, y = 0, drawW = pageW, drawH = pageH;
+      if (Math.abs(actualRatio - targetRatio) > 0.05) {
+        var ratio = Math.max(pageW / (cw/3.78), pageH / (ch/3.78));
+        drawW = (cw/3.78)*ratio; drawH = (ch/3.78)*ratio;
+        x = (pageW - drawW)/2; y = (pageH - drawH)/2;
+      }
+      pdf.addImage(imgData, 'JPEG', x, y, drawW, drawH);
+      done++;
+      progressFill.style.width = Math.round(done/pages.length*90+5) + '%';
+      statusMsg.textContent = '正在生成第 ' + done + ' / ' + pages.length + ' 页...';
+      setTimeout(function() { captureNext(idx + 1); }, 100);
+    }).catch(function() { done++; captureNext(idx + 1); });
+  }
+  captureNext(0);
+}
+
+function downloadSummaryExcel() {
+  // 从 localStorage 读取完整历史记录
+  var history = loadHistoryFromLocalStorage();
+  // 合并当前未下载PDF的批次
+  var allRows = history.slice();
+  for (var i = 0; i < allGeneratedRows.length; i++) {
+    var r = allGeneratedRows[i];
+    allRows.push({
+      code: normalize(r.code), industry: normalize(r.industry), area: normalize(r.area),
+      name: normalize(r.name), model: normalize(r.model),
+      contact: normalize(r.contact), phone: normalize(r.phone),
+      _genTime: r._genTime || '', _batch: r._batch || (batchCountSaved + batchCount)
+    });
+  }
+  if (allRows.length === 0) { alert('暂无物流贴记录，请先生成'); return; }
+  var data = [['序号','生成批次','产业','区域名称','编码','产品名称','产品型号','联系人','联系方式','生成时间']];
+  for (var i = 0; i < allRows.length; i++) {
+    var r = allRows[i];
+    data.push([
+      i + 1,
+      '第' + (r._batch || 1) + '次',
+      r.industry || '',
+      r.area || '',
+      r.code || '',
+      r.name || '',
+      r.model || '',
+      r.contact || '',
+      r.phone || '',
+      r._genTime || ''
+    ]);
+  }
+  var ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [{wch:6},{wch:10},{wch:12},{wch:20},{wch:24},{wch:28},{wch:24},{wch:12},{wch:16},{wch:22}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '物流贴汇总');
+  XLSX.writeFile(wb, '物流贴汇总_' + getDateStr() + '.xlsx');
+}
+
+function resetCurrentBatch() {
+  if (currentBatchRows.length === 0) return;
+  allGeneratedRows = allGeneratedRows.slice(0, allGeneratedRows.length - currentBatchRows.length);
+  currentBatchRows = [];
+  batchCount = Math.max(0, batchCount - 1);
+  updateGenSummary();
+  saveToLocalStorage();
+  if (allGeneratedRows.length > 0) renderGenLabels(allGeneratedRows);
+  else { document.getElementById('labelContainer').classList.add('hidden'); document.getElementById('labelContainer').innerHTML = ''; document.getElementById('genActionArea').classList.add('hidden'); document.getElementById('genEmptyState').classList.remove('hidden'); }
+}
+
+function clearAllGenerated() {
+  var total = genTotalSaved + allGeneratedRows.length;
+  if (total === 0) return;
+  if (!confirm('确定清空所有物流贴记录？此操作不可撤销，累计统计将归零。')) return;
+  allGeneratedRows = []; currentBatchRows = []; batchCount = 0;
+  genTotalSaved = 0; batchCountSaved = 0;
+  try { localStorage.removeItem(LS_KEY); localStorage.removeItem(LS_CODES_KEY); localStorage.removeItem(LS_HISTORY_KEY); } catch(e) {}
+  updateGenSummary();
+  document.getElementById('labelContainer').classList.add('hidden');
+  document.getElementById('labelContainer').innerHTML = '';
+  document.getElementById('genActionArea').classList.add('hidden');
+  document.getElementById('genEmptyState').classList.remove('hidden');
+  document.getElementById('genFileInput').value = '';
+}
+
+// ====================================================================
+// 核销系统：来源切换
+// ====================================================================
+function switchSource(src) {
+  currentSource = src;
+  document.getElementById('vTabExcel').classList.toggle('active', src === 'excel');
+  document.getElementById('vTabGen').classList.toggle('active', src === 'gen');
+  document.getElementById('excelSourcePanel').classList.toggle('hidden', src !== 'excel');
+  document.getElementById('genSourcePanel').classList.toggle('hidden', src !== 'gen');
+  if (src === 'gen') loadGenCodes();
+}
+
+// 核销：扫码方式切换
+function switchScanMode(mode) {
+  document.getElementById('scanTabManual').classList.toggle('active', mode === 'manual');
+  document.getElementById('scanTabCamera').classList.toggle('active', mode === 'camera');
+  document.getElementById('manualScanPanel').classList.toggle('hidden', mode !== 'manual');
+  document.getElementById('cameraScanPanel').classList.toggle('hidden', mode !== 'camera');
+  if (mode === 'manual' && cameraActive) toggleCamera();
+}
+
+// 核销：Excel上传
+var vUploadZone = document.getElementById('vUploadZone');
+var vFileInput = document.getElementById('vFileInput');
+vUploadZone.addEventListener('click', function() { vFileInput.click(); });
+vUploadZone.addEventListener('dragover', function(e) { e.preventDefault(); vUploadZone.classList.add('dragover'); });
+vUploadZone.addEventListener('dragleave', function() { vUploadZone.classList.remove('dragover'); });
+vUploadZone.addEventListener('drop', function(e) { e.preventDefault(); vUploadZone.classList.remove('dragover'); if (e.dataTransfer.files.length) handleVerifyFile(e.dataTransfer.files[0]); });
+vFileInput.addEventListener('change', function(e) { if (e.target.files.length) handleVerifyFile(e.target.files[0]); });
+
+function handleVerifyFile(file) {
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      var sheet = wb.Sheets[wb.SheetNames[0]];
+      var headers = [], range = XLSX.utils.decode_range(sheet['!ref']);
+      for (var c = range.s.c; c <= range.e.c; c++) { var cell = sheet[XLSX.utils.encode_cell({r:range.s.r,c:c})]; headers.push(cell ? cell.v : ''); }
+      var rows = [];
+      for (var r = range.s.r + 1; r <= range.e.r; r++) {
+        var rowData = {};
+        for (var d = 0; d < COL_DEFS_VERIFY.length; d++) {
+          var colIdx = findCol(headers, COL_DEFS_VERIFY[d]);
+          if (colIdx === -1) continue;
+          var cellRef = XLSX.utils.encode_cell({r:r, c:colIdx});
+          var cell = sheet[cellRef];
+          rowData[COL_DEFS_VERIFY[d].key] = cell ? normalize(cell.v) : '';
+        }
+        if (normalize(rowData.code)) rows.push(rowData);
+      }
+      if (rows.length === 0) { alert('未找到编码数据，请确保 Excel 中有"编码"列'); return; }
+      for (var i = 0; i < rows.length; i++) { rows[i].matched = false; rows[i].scanTime = null; rows[i].scanCount = 0; rows[i].source = 'excel'; }
+      verifyData = rows; scanHistory = [];
+      document.getElementById('vFileInfo').classList.remove('hidden');
+      document.getElementById('vFileName').textContent = file.name;
+      document.getElementById('vFileCount').textContent = '（' + rows.length + ' 条编码）';
+      document.getElementById('excelBadge').textContent = rows.length;
+      enableVerifyControls(); updateVerifyStats(); renderVerifyTable(); renderRecent();
+      showStatus('success', '✅ 已加载 ' + rows.length + ' 条编码，可以开始扫码核销');
+    } catch (err) { alert('解析 Excel 失败: ' + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function removeVerifyExcel() {
+  verifyData = []; scanHistory = [];
+  document.getElementById('vFileInfo').classList.add('hidden');
+  document.getElementById('excelBadge').textContent = '0';
+  disableVerifyControls();
+  if (cameraActive) toggleCamera();
+  updateVerifyStats(); renderVerifyTable(); renderRecent();
+  document.getElementById('vFileInput').value = '';
+  showStatus('info', '已移除 Excel，请重新上传');
+}
+
+// 核销：抓取本页生成器编码
+function loadGenCodes() {
+  // 优先从 localStorage 读取累积的编码列表
+  var codes = [];
+  try { var raw = localStorage.getItem(LS_CODES_KEY); if (raw) codes = JSON.parse(raw); } catch(e) {}
+  if (!Array.isArray(codes)) codes = [];
+  // 也合并当前页面内存中的（还没下载PDF的）
+  for (var i = 0; i < allGeneratedRows.length; i++) {
+    var r = allGeneratedRows[i];
+    var exists = false;
+    for (var j = 0; j < codes.length; j++) { if (codes[j].code === normalize(r.code)) { exists = true; break; } }
+    if (!exists) codes.push({ code: normalize(r.code), industry: normalize(r.industry), area: normalize(r.area), name: normalize(r.name), model: normalize(r.model), contact: normalize(r.contact), phone: normalize(r.phone) });
+  }
+  genCachedCodes = codes;
+  if (genCachedCodes.length > 0) {
+    document.getElementById('genCodesCount').textContent = genCachedCodes.length;
+    document.getElementById('genBadge').textContent = genCachedCodes.length;
+    document.getElementById('genImportCount').textContent = genCachedCodes.length;
+    document.getElementById('genCodesEmpty').classList.add('hidden');
+    document.getElementById('genCodesPreview').classList.remove('hidden');
+    var tbody = document.getElementById('genCodesBody'), htm = '';
+    for (var i = 0; i < Math.min(genCachedCodes.length, 50); i++) {
+      var r = genCachedCodes[i];
+      htm += '<tr><td style="font-family:monospace;font-weight:600;">' + r.code + '</td><td>' + r.industry + '</td><td>' + r.name + '</td><td>' + r.model + '</td></tr>';
+    }
+    if (genCachedCodes.length > 50) htm += '<tr><td colspan="4" style="text-align:center;color:#94a3b8;">... 还有 ' + (genCachedCodes.length - 50) + ' 条</td></tr>';
+    tbody.innerHTML = htm;
+  } else {
+    genCachedCodes = [];
+    document.getElementById('genCodesCount').textContent = '0';
+    document.getElementById('genBadge').textContent = '0';
+    document.getElementById('genCodesEmpty').classList.remove('hidden');
+    document.getElementById('genCodesPreview').classList.add('hidden');
+  }
+}
+
+function importGenCodes() {
+  if (genCachedCodes.length === 0) { alert('没有可导入的编码'); return; }
+  verifyData = genCachedCodes.map(function(r) {
+    return { code: r.code, industry: r.industry, area: r.area, name: r.name, model: r.model, contact: r.contact, phone: r.phone, source: 'gen', matched: false, scanTime: null, scanCount: 0 };
+  });
+  scanHistory = [];
+  enableVerifyControls(); updateVerifyStats(); renderVerifyTable(); renderRecent();
+  showStatus('success', '✅ 已从物流贴生成器抓取 ' + verifyData.length + ' 条编码，可以开始扫码核销');
+}
+
+// 核销：控件启停
+function enableVerifyControls() {
+  document.getElementById('manualInput').disabled = false;
+  document.getElementById('manualBtn').disabled = false;
+  document.getElementById('cameraBtn').disabled = false;
+  document.getElementById('exportResultBtn').disabled = false;
+  document.getElementById('clearVerifyBtn').disabled = false;
+}
+function disableVerifyControls() {
+  document.getElementById('manualInput').disabled = true;
+  document.getElementById('manualBtn').disabled = true;
+  document.getElementById('cameraBtn').disabled = true;
+  document.getElementById('exportResultBtn').disabled = true;
+  document.getElementById('clearVerifyBtn').disabled = true;
+}
+
+// 核销：摄像头
+function toggleCamera() {
+  if (cameraActive) {
+    if (cameraStream) { cameraStream.getTracks().forEach(function(t) { t.stop(); }); cameraStream = null; }
+    if (scanLoop) { cancelAnimationFrame(scanLoop); scanLoop = null; }
+    cameraActive = false;
+    document.getElementById('videoWrap').style.display = 'none';
+    document.getElementById('cameraBtn').textContent = '📷 开启摄像头扫码';
+    return;
+  }
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(function(stream) {
+    cameraStream = stream;
+    var video = document.getElementById('scanVideo');
+    video.srcObject = stream; video.play();
+    cameraActive = true;
+    document.getElementById('videoWrap').style.display = 'block';
+    document.getElementById('cameraBtn').textContent = '⏹ 关闭摄像头';
+    startScanLoop();
+  }).catch(function(err) { alert('无法访问摄像头: ' + err.message + '\n可使用手动输入功能'); });
+}
+function startScanLoop() {
+  var video = document.getElementById('scanVideo'), canvas = document.getElementById('scanCanvas');
+  var ctx = canvas.getContext('2d', { willReadFrequently: true });
+  function scan() {
+    if (!cameraActive) return;
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      var code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
+      if (code && code.data) processScan(code.data, true);
+    }
+    scanLoop = requestAnimationFrame(scan);
+  }
+  scan();
+}
+var lastScannedCode = null, lastScanTime = 0;
+function processScan(code, fromCamera) {
+  var now = Date.now();
+  if (fromCamera && lastScannedCode === code && (now - lastScanTime) < 2000) return;
+  lastScannedCode = code; lastScanTime = now;
+  doMatch(code);
+}
+
+// 核销：手动输入
+function submitManual() {
+  var input = document.getElementById('manualInput');
+  var code = normalize(input.value);
+  if (!code) return;
+  doMatch(code); input.value = '';
+}
+document.getElementById('manualInput').addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); submitManual(); } });
+
+// 核销：匹配
+function doMatch(code) {
+  var found = null;
+  for (var i = 0; i < verifyData.length; i++) { if (verifyData[i].code === code) { found = verifyData[i]; break; } }
+  var timeStr = new Date().toLocaleString('zh-CN'), result;
+  if (found) {
+    found.scanCount = (found.scanCount || 0) + 1;
+    if (found.matched) result = { code: code, status: 'duplicate', msg: '重复扫码！该编码已于 ' + found.scanTime + ' 核销过', time: timeStr };
+    else { found.matched = true; found.scanTime = timeStr; result = { code: code, status: 'matched', msg: '✅ 匹配成功！' + (found.name || '') + (found.model ? '（' + found.model + '）' : ''), time: timeStr }; }
+  } else { result = { code: code, status: 'unmatched', msg: '❌ 未匹配！该编码不在编码清单中', time: timeStr }; }
+  scanHistory.unshift(result);
+  if (scanHistory.length > 50) scanHistory.pop();
+  updateVerifyStats(); renderRecent(); renderVerifyTable();
+  if (result.status === 'matched') showStatus('success', result.msg);
+  else if (result.status === 'duplicate') showStatus('info', '⚠️ ' + result.msg);
+  else showStatus('fail', result.msg);
+}
+
+function showStatus(type, msg) { var el = document.getElementById('scanStatus'); el.className = 'scan-status ' + type; el.textContent = msg; }
+
+// 核销：统计
+function updateVerifyStats() {
+  var total = verifyData.length, matched = 0, scanCount = 0;
+  for (var i = 0; i < verifyData.length; i++) { if (verifyData[i].matched) matched++; scanCount += (verifyData[i].scanCount || 0); }
+  var unmatched = total - matched;
+  document.getElementById('vTotal').textContent = total;
+  document.getElementById('vMatched').textContent = matched;
+  document.getElementById('vUnmatched').textContent = unmatched;
+  document.getElementById('vScanned').textContent = scanCount;
+  document.getElementById('cardTotal').textContent = total;
+  document.getElementById('cardMatched').textContent = matched;
+  document.getElementById('cardUnmatched').textContent = unmatched;
+  document.getElementById('cardScanned').textContent = scanCount;
+}
+
+// 核销：最近结果
+function renderRecent() {
+  var container = document.getElementById('recentResults');
+  if (scanHistory.length === 0) { container.innerHTML = '<div class="empty-state"><div class="icon">🔍</div><div>扫码后结果会显示在这里</div></div>'; return; }
+  var html = '';
+  for (var i = 0; i < Math.min(scanHistory.length, 8); i++) {
+    var r = scanHistory[i], icon, cls;
+    if (r.status === 'matched') { icon = '✅'; cls = 'matched'; }
+    else if (r.status === 'duplicate') { icon = '⚠️'; cls = 'duplicate'; }
+    else { icon = '❌'; cls = 'unmatched'; }
+    html += '<div class="recent-result ' + cls + '"><div class="result-icon">' + icon + '</div><div class="result-info"><div class="result-code">' + r.code + '</div><div class="result-msg">' + r.msg + '</div></div><div class="result-time">' + r.time + '</div></div>';
+  }
+  container.innerHTML = html;
+}
+
+// 核销：表格
+function renderVerifyTable() {
+  var filterText = normalize(document.getElementById('filterInput').value).toLowerCase();
+  var filterStatus = document.getElementById('filterStatus').value;
+  var tbody = document.getElementById('tableBody');
+  if (verifyData.length === 0) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:30px;">请先选择编码来源并导入编码</td></tr>'; return; }
+  var html = '', idx = 0;
+  for (var i = 0; i < verifyData.length; i++) {
+    var r = verifyData[i];
+    if (filterStatus === 'matched' && !r.matched) continue;
+    if (filterStatus === 'unmatched' && r.matched) continue;
+    if (filterStatus === 'duplicate' && (r.scanCount || 0) < 2) continue;
+    if (filterText) { var st = (r.code + ' ' + r.name + ' ' + r.model + ' ' + r.industry).toLowerCase(); if (st.indexOf(filterText) === -1) continue; }
+    idx++;
+    var tag = r.matched && (r.scanCount||0) > 1 ? '<span class="tag duplicate">重复扫码</span>' : r.matched ? '<span class="tag matched">已核销</span>' : '<span class="tag pending">待核销</span>';
+    var sourceTag = r.source === 'gen' ? '<span class="tag source-v8">物流贴生成器</span>' : '<span class="tag source-excel">Excel</span>';
+    html += '<tr><td>' + idx + '</td><td>' + sourceTag + '</td><td style="font-family:monospace;font-weight:600;">' + r.code + '</td><td>' + (r.name||'-') + '</td><td>' + (r.model||'-') + '</td><td>' + tag + '</td><td>' + (r.scanTime||'-') + '</td><td style="text-align:center;">' + (r.scanCount||0) + '</td></tr>';
+  }
+  tbody.innerHTML = idx === 0 ? '<tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:20px;">无匹配结果</td></tr>' : html;
+}
+
+// 核销：导出
+function exportResults() {
+  if (verifyData.length === 0) return;
+  var data = [['序号','来源','编码','产业','区域名称','产品名称','产品型号','联系人','联系方式','核销状态','扫码次数','首次核销时间']];
+  for (var i = 0; i < verifyData.length; i++) {
+    var r = verifyData[i];
+    data.push([i+1, r.source==='gen'?'物流贴生成器':'Excel', r.code, r.industry||'', r.area||'', r.name||'', r.model||'', r.contact||'', r.phone||'', r.matched?'已核销':'未核销', r.scanCount||0, r.scanTime||'']);
+  }
+  var ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [{wch:6},{wch:14},{wch:24},{wch:12},{wch:20},{wch:28},{wch:24},{wch:12},{wch:16},{wch:10},{wch:10},{wch:22}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '核销结果');
+  XLSX.writeFile(wb, '核销结果_' + getDateStr() + '.xlsx');
+}
+
+// 核销：清空
+function clearVerify() {
+  if (verifyData.length === 0) return;
+  if (!confirm('确定清空所有核销数据？')) return;
+  if (cameraActive) toggleCamera();
+  verifyData = []; scanHistory = [];
+  document.getElementById('vFileInfo').classList.add('hidden');
+  document.getElementById('excelBadge').textContent = '0';
+  disableVerifyControls();
+  document.getElementById('vFileInput').value = '';
+  document.getElementById('scanStatus').className = 'scan-status';
+  updateVerifyStats(); renderVerifyTable(); renderRecent();
+}
+
+// ====================================================================
+// 示例二维码 + 初始化
+// ====================================================================
+window.addEventListener('DOMContentLoaded', function() {
+
+  // 从 localStorage 恢复汇总统计（不恢复物流贴明细，PDF需每次即时下载）
+  var saved = loadFromLocalStorage();
+  if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+    // 只恢复数字统计，实际物流贴明细不保留
+    genTotalSaved = saved.totalGenerated || 0;
+    batchCountSaved = saved.batchCount || 0;
+  }
+  updateGenSummary();
+  updateVerifyStats();
+});
+</script>
+</body>
+</html>
